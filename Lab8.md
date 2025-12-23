@@ -8,237 +8,156 @@ Course: Networks System Design
 
 Instructor: KUY Movsun
 
-Assignment: Lab8( Router Queuing, Congestion & Advanced Forwarding )
+Assignment: Lab9( Network Layer Data Plane )
 
-Due Date: December 23, 2025 (12:00 AM)
+Due Date: December 30, 2025 (12:00 AM)
 
 </p>
 <br/>
 
-# Part 1: Dual-Path Topology Setup
+## Part 1: Topology & Addressing
 
-## 🖥️ Addressing Table
+### Device Table
 
-| Device      | Interface | IP Address    | Subnet Mask     | Description      |
-| ----------- | --------- | ------------- | --------------- | ---------------- |
-| PC-1        | NIC       | 192.168.1.10  | 255.255.255.0   | Source A         |
-| Router-A    | G0/0/0    | 192.168.1.1   | 255.255.255.0   | Gateway          |
-| Router-A    | S0/3/0    | 10.1.1.1      | 255.255.255.252 | Path 1 (Serial)  |
-| Router-A    | G0/0/1    | 10.2.2.1      | 255.255.255.252 | Path 2 (Gigabit) |
-| Router-B    | S0/3/0    | 10.1.1.2      | 255.255.255.252 | Path 1           |
-| Router-B    | G0/0/1    | 10.2.2.2      | 255.255.255.252 | Path 2           |
-| Router-B    | G0/0/0    | 192.168.2.1   | 255.255.255.0   | Dest Gateway     |
-| Server-Dest | NIC       | 192.168.2.100 | 255.255.255.0   | Destination      |
+| Device Name  | Model     | Interface | Description                         |
+| ------------ | --------- | --------- | ----------------------------------- |
+| ISP-Router   | ISR 4331  | Gig0/0/0  | WAN Link (to Home-Gateway)          |
+|              |           | Gig0/0/1  | Internet Link (to Server)           |
+| Home-Gateway | ISR 4331  | Gig0/0/0  | WAN Uplink (to ISP)                 |
+|              |           | Gig0/0/1  | LAN Gateway (to Switch)             |
+| LAN-Switch   | 2960      | Any       | Layer 2 Switch                      |
+| Public-DNS   | Server-PT | NIC       | Simulated Internet Server (8.8.8.8) |
+
+### Cabling Guide
+
+- ISP-Router (G0/0/0) ↔ Home-Gateway (G0/0/0): Copper Crossover (or Straight-through if Auto-MDIX)
+- ISP-Router (G0/0/1) ↔ Public-DNS: Copper Crossover
+- Home-Gateway (G0/0/1) ↔ LAN-Switch (G0/1): Copper Straight-through
+- LAN-Switch ↔ PC-A, PC-B, PC-C: Copper Straight-through
+
+<img src="./Image/image.png">
+
+## Part 2: Pre-Lab Setup (Instructor Configuration)
+
+### Configure Public-DNS Server
+
+1. Go to **Public-DNS > Desktop > IP Configuration**
+2. Set:
+   - IP Address: `8.8.8.8`
+   - Subnet Mask: `255.255.255.0`
+   - Default Gateway: `8.8.8.1`
+
+### Configure ISP-Router (CLI)
+
+```bash
+Router> enable
+Router# configure terminal
+Router(config)# hostname ISP-Router
+
+! Connection to Server
+Router(config)# interface g0/0/1
+Router(config-if)# ip address 8.8.8.1 255.255.255.0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+
+! Connection to Home-Gateway
+Router(config)# interface g0/0/0
+Router(config-if)# ip address 203.0.113.1 255.255.255.252
+Router(config-if)# no shutdown
+Router(config-if)# end
+```
+
+ <img src="./Image/image copy.png">
 
 ---
+
+## Task 3: Implementing NAT (Network Address Translation)
+
+### Scenario
+
+Convert the LAN to a private network (`192.168.1.0/24`) and configure NAT Overload (PAT) so internal hosts can access the Internet.
+
+---
+
+### Step 3A: Configure WAN Link & Default Route
+
+```bash
+Home-Gateway(config)# interface g0/0/0
+Home-Gateway(config-if)# description WAN-Link
+Home-Gateway(config-if)# ip address 203.0.113.2 255.255.255.252
+Home-Gateway(config-if)# no shutdown
+Home-Gateway(config-if)# exit
+
+! Default route to ISP
+Home-Gateway(config)# ip route 0.0.0.0 0.0.0.0 203.0.113.1
+```
+
+### Step 3B: Re-configure LAN as Private Network
+
+```bash
+! Change LAN Gateway IP
+Home-Gateway(config)# interface g0/0/1
+Home-Gateway(config-if)# ip address 192.168.1.1 255.255.255.0
+Home-Gateway(config-if)# exit
+
+! Update DHCP Pool
+Home-Gateway(config)# no ip dhcp pool LAN_POOL
+Home-Gateway(config)# ip dhcp pool PRIVATE_LAN
+Home-Gateway(dhcp-config)# network 192.168.1.0 255.255.255.0
+Home-Gateway(dhcp-config)# default-router 192.168.1.1
+Home-Gateway(dhcp-config)# dns-server 8.8.8.8
+Home-Gateway(dhcp-config)# exit
+```
+
+### Step 3C: Force PCs to renew IP
+
+On PC-A, PC-B, and PC-C: Open the IP Configuration window, switch to Static, wait a second, then switch back to DHCP. Verify they now have an address like 192.168.1.2.
+
+<img src="./Image/image copy 6.png" >
+
+### Step 3D: Configure NAT Overload (PAT)
+
+```bash
+! Define Inside and Outside interfaces
+Home-Gateway(config)# interface g0/0/1
+Home-Gateway(config-if)# ip nat inside
+Home-Gateway(config-if)# exit
+
+Home-Gateway(config)# interface g0/0/0
+Home-Gateway(config-if)# ip nat outside
+Home-Gateway(config-if)# exit
+
+! Create ACL for LAN traffic
+Home-Gateway(config)# access-list 1 permit 192.168.1.0 0.0.0.255
+
+! Apply NAT Overload
+Home-Gateway(config)# ip nat inside source list 1 interface g0/0/0 overload
+
+```
+
+- Verification: Open Command Prompt on PC-A. Ping 8.8.8.8.
+  If configured correctly, the ping will succeed.
+
+<img src="./Image/image copy 3.png">
+
+- Check the router table: show ip nat translations.
 
 <img src="./Image/image copy 4.png">
 
-# Part 2: Configuring the Bottleneck
+##
 
-## Verify the Link Speed
+```bash
+! Enable IPv6 routing
+Home-Gateway(config)# ipv6 unicast-routing
 
-### Given value
+! Configure IPv6 on LAN interface
+Home-Gateway(config)# interface g0/0/1
+Home-Gateway(config-if)# ipv6 address 2001:DB8:ACAD:1::1/64
+Home-Gateway(config-if)# no shutdown
+Home-Gateway(config-if)# exit
 
-<img src="./Image/image copy.png">
+```
 
-### Calculation
+- Verification: On PC-C > IP Configuration, look at the "IPv6 Configuration" section. Ensure it is set to Auto Config. It should automatically generate an IPv6 address.
 
-<img src="./Image/image copy 2.png">
-<img src="./Image/image copy 3.png">
-
-- On the Gigabit LAN, the packet is transmitted almost instantly.
-
-- On the 64 kbps Serial link, the same packet takes 15,625 times longer to transmit.
-
-- This huge mismatch is why Router‑A must queue packets when traffic exceeds the serial link’s capacity.
-
----
-
-# Part 3: Observing Queuing Delay
-
-## 3.1 Baseline Ping (No Congestion)
-
-- **Setup:** Simulation Mode enabled, ICMP filter applied, ping from PC-1 → Server-Dest.
-- **Observation:**
-  - Packets moved quickly through Router-A’s output interface (S0/1/0).
-  - Minimal or no stacking of envelopes in the queue.
-- **Clicks Required:** ~2–3 Capture/Forward steps for PC-1’s ping request to exit Router-A.
-
-## <img src="./Image/image.png">
-
-## 3.2 Generating Background Noise (The Flood)
-
-- **Setup:** PC-2 configured to send 1000-byte packets periodically (0.5s interval) to Server-Dest.
-- **Observation:**
-  - Router-A’s output queue began filling with PC-2’s packets.
-  - Continuous traffic kept the interface busy.
-
-## <img src="./Image/image copy 5.png">
-
----
-
-## 3.3 Measuring Delay Under Load
-
-- **Setup:** While PC-2 floods the network with periodic 1000-byte ICMP packets, a ping is sent from PC-1 to Server-Dest.
-- **Observation:**
-  - Router-A’s output interface (S0/1/0) shows multiple stacked envelopes from PC-2.
-  - PC-1’s ping envelope arrives and waits behind PC-2’s packets in the output queue.
-  - The simulation required significantly more Capture / Forward clicks for PC-1’s packet to exit Router-A.
-- **Clicks Required:**
-  - Baseline (no congestion): ~2–3 clicks.
-  - Under load: ~8–12 clicks before PC-1’s ping exited Router-A.
-- **Conclusion:**
-  - Queuing delay increases when the router is congested.
-  - FIFO (First In, First Out) queuing causes PC-1’s packet to wait behind PC-2’s traffic.
-  - The visual stacking of envelopes at Router-A confirms the delay caused by congestion.
-
-## <img src="./Image/image copy 6.png">
-
----
-
-## Activity Questions
-
-**Q1. Baseline (no traffic):**
-
-- PC-1’s ping request required ~2–3 Capture/Forward clicks to exit Router-A’s output queue.
-
-**Q2. Under congestion (with PC-2 flooding):**
-
-- PC-1’s ping request required ~6–8 clicks.
-- The visual queue buildup showed multiple envelopes stacked at Router-A’s S0/1/0 interface.
-
-**Q3. Explanation:**
-
-- PC-1’s packet took more simulation steps because Router-A’s output queue was busy with PC-2’s traffic.
-- In FIFO (First In, First Out) queuing, PC-1’s packet had to wait until earlier packets were transmitted.
-- The **Output Queue visualization** (stacked envelopes) demonstrated how congestion increases queuing delay.
-
----
-
-## Part 4: Observing Packet Loss (Tail Drop)
-
-### 4.1 Intensify the Traffic
-
-- **Change:** PC-2 Complex PDU interval set to **0.1s** with **1000-byte** packets.
-- **Reason:** 1000 bytes / 0.1s ≈ 80 kbps demand; link capacity is **64 kbps**, ensuring buffer overflow and drops.
-
-### 4.2 Observe the Drop
-
-- **Observation:** After ~10–20 Capture/Forward steps, a packet at **Router-A S0/1/0** turns into a **red flame/X**, indicating a drop.
-
-### 4.3 Analyze the Drop Reason
-
-- **Exact message (copied from PDU Information → OSI Model):**
-
-## <img src="./Image/image copy 7.png">
-
-### Activity Question 3
-
-- **Answer:** The simulator’s drop reason was:
-  - “**\*\***\*\***\*\***\_\_\_**\*\***\*\***\*\***” (exact wording from OSI tab).
-
-### Activity Question 4
-
-- **Answer:**
-  - **Default behavior:** FIFO does not prioritize PC-1; packets are served in arrival order.
-  - **Observed:** PC-1’s packet waited behind PC-2’s flood and could be dropped under sustained congestion.
-
-### Activity Question 5
-
-- **Answer:**
-  - **Mechanism:** Implement **QoS** on Router-A (e.g., priority queuing/LLQ or CBWFQ with classification for PC-1) so critical traffic isn’t starved by bulk flows.
-  - **Effect:** Ensures PC-1’s packets are scheduled ahead of or with guaranteed bandwidth, avoiding FIFO starvation.
-
----
-
-## Part 5: Longest Prefix Match (LPM)
-
-### 5.1 Enable Both Links
-
-- **Action:** Bring up both Serial and Gigabit interfaces on Router-A and Router-B.
-- **Commands:**
-
-  ```bash
-  Router-A(config)# interface s0/1/0
-  Router-A(config-if)# no shutdown
-  Router-A(config)# interface g0/0/1
-  Router-A(config-if)# no shutdown
-
-  Router-B(config)# interface s0/1/0
-  Router-B(config-if)# no shutdown
-  Router-B(config)# interface g0/0/1
-  Router-B(config-if)# no shutdown
-  ```
-
-### 5.2 Configure Competing Routes
-
-Router-A(config)# ip route 192.168.2.0 255.255.255.0 10.1.1.2
-Router-A(config)# ip route 192.168.2.0 255.255.255.128 10.2.2.2
-
-### 5.3 Predict & Verify
-
-- **Prediction:**
-
-  - IP `192.168.2.100` matches the `/24` route but not the `/25` route.
-  - Router-A will choose the `/24` route via the **Serial link**.
-
-- **Verification (Simulation Mode):**
-  - Ping sent from PC-1 to Server-Dest.
-  - At Router-A, the packet exited through **Serial0/1/0**.
-  - This confirms that the router selected the `/24` route.
-
-<img src="./Image/image copy 8.png">
-
----
-
-## Part 6: Floating Static Routes (Backup Link)
-
-### 6.1 Cleanup
-
-- Removed overlapping routes from Part 5.
-
-### 6.2 Configure Primary and Backup Routes
-
-- **Primary Route:**  
-  `ip route 192.168.2.0 255.255.255.0 10.2.2.2` (Gigabit link, AD = 1)
-- **Backup Route:**  
-  `ip route 192.168.2.0 255.255.255.0 10.1.1.2 50` (Serial link, AD = 50)
-
-### 6.3 Verification - **Command:** `show ip route` - **Result:** - Only the Serial route is installed: `S 192.168.2.0/24 [50/0] via 10.1.1.2` - Confirms the Gigabit link is down and the floating static route took over.
-
-<img src="./Image/image copy 9.png">
-
-### 6.4 Simulate Failure
-
-- **Action:**
-
-  - A continuous ping was initiated from **PC-1** to `192.168.2.100`.
-  - The command `ping 192.168.2.100` was used in PC-1’s Command Prompt.
-
-- **Observation:**
-
-  - The ping replies came from `10.1.1.2` with the message:  
-    **"Destination host unreachable."**
-  - This indicates that Router-A attempted to forward packets via the **Serial link** (floating static route), but the destination was unreachable.
-
-- **Routing Table Check (Router-A):**
-
-  - The command `show ip route` showed:
-    ```
-    S 192.168.2.0/24 [50/0] via 10.1.1.2
-    ```
-  - This confirms that the **floating static route (AD = 50)** was activated due to Gigabit link failure.
-
-<img src="./Image/image copy 10.png">
-
-- **Conclusion:**
-  - Router-A successfully switched to the backup route via Serial link.
-  - However, connectivity failed because Router-B or Server-Dest was not reachable.
-  - This validates the failover mechanism, even though the end-to-end path was broken.
-
-### Activity Question 8
-
-- **Answer:**
-  - After the Gigabit link failure, Router-A’s routing table showed the backup route via `10.1.1.2`.
-  - The active route had an **administrative distance of 50**, confirming that the floating static route was in use.
+<img src="./Image/image copy 5.png">
