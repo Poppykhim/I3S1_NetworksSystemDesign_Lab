@@ -147,18 +147,15 @@ Possible values of **K**: {0, 1, 2, 3, 4, 5, 6, 7}
 ## Topology Setup
 
 - **Devices Used:**
-
   - PC0, PC1, PC2, PC3
   - Hub0
   - Switch0
 
 - **Connections:**
-
   - PC0 and PC1 connected to Hub0 using Copper Straight-Through cables
   - PC2 and PC3 not connected
 
 - **Simulation Mode:**
-
   - Switch to Simulation Mode (Shift + S)
   - Open "Edit Filters" and enable only **ICMP**
 
@@ -191,7 +188,6 @@ Possible values of **K**: {0, 1, 2, 3, 4, 5, 6, 7}
 ### Why does a collision occur when using a Hub?
 
 - **Layer 1 Behavior (Hub):**
-
   - Operates at the Physical Layer
   - Does not inspect MAC addresses
   - Repeats incoming signals to all ports
@@ -313,7 +309,6 @@ Understand how switches learn MAC addresses to create dedicated collision domain
 ### 5. Check MAC Table
 
 - Open the Switch CLI again and run: show mac-address-table
-
   - You should now see **PC0’s MAC address** associated with its port (e.g., Fa0/1).
 
 ### 6. Complete the Ping
@@ -326,9 +321,13 @@ Understand how switches learn MAC addresses to create dedicated collision domain
 
 - You should now see **PC1’s MAC address** added to the table.
 
----
+## <img src="./Image/image copy 3.png">
 
-##  Analysis Question
+## <img src="./Image/image copy 4.png">
+
+## <img src="./Image/image copy 5.png">
+
+## Analysis Question
 
 **In Activity A (Hub), the packet was broadcast to everyone. In this activity, after the MAC table was populated, did the Switch send the ICMP reply (from PC1) to PC2? Why or why not?**
 
@@ -338,6 +337,6 @@ Understand how switches learn MAC addresses to create dedicated collision domain
 
 ---
 
-##  Summary
+## Summary
 
 Switches dynamically learn MAC addresses from incoming frames and build a table to forward traffic efficiently. This isolates communication between devices and eliminates collisions, making switches ideal for modern LAN environments.
